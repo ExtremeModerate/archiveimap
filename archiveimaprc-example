@@ -1,0 +1,100 @@
+# nickname of a mail server
+#  imaphost: hostname of the imap server
+#  imapssl : 0 or 1 use SSL for connection? 
+#  imapport: port number to connect to (if not provided, default to 143 when imapssl=0 or 993 when imapssl=1)
+#  auth: password|netrc|md5|cert - authentication type (only password and netrc work)
+#  username: password - required for "password" auth
+#  password: password - required for "password" auth
+#  archiveroot: root_folder - root folder for the archives
+#  sourcefolder: folder - source folder for archiving (defaults to INBOX)
+#  archiverange: year|quarter|month|day - how to format the 
+#    year will produce root_folder.sourcefolder-yyyy directories
+#    quarter will produce root_folder.yyyy.sourcefolder-Q[1-4] directories
+#    month will produce root_folder.yyyy.sourcefolder-[01-12] directories
+#    day will produce root_folder.yyyy.mm.sourcefolder-[01-31] directories
+#  age: days - minimum age of messages to be archived, default=don't archive
+#  seen: 0|1 - if 0 delete all messages, if 1 archive only "seen/read" messages? default=1
+
+# office365 was my last working version when I had a Office 365 account.
+# All archives for this host are "Quarterly"
+# Username & Password are stored in .netrc for the host "podsomethingsomething.outlook.com"
+# Items in the INBOX over 44 days old, whether they've been read or not are archived
+# Items in "Sent Items" over 30 days old, whether they've been read or not are archived
+# Items in "Deleted Items" over 90 days old, whether they've been read or not and regardless of
+#   whether dates are rational are marked as deleted.  If the -x option is used, they will be purged
+
+
+office365:
+ imaphost: pod12345.outlook.com
+ imapssl: 1
+ auth: netrc
+ archiveroot: Archives
+ archiverange: quarter
+ sourcefolder:
+  - folder : INBOX
+    age    : 44
+    seen   : 0
+    action : archive
+  - folder : Sent Items
+    age    : 30
+    seen   : 0
+    action : archive
+  - folder : Deleted Items
+    age    : 90
+    ignorebaddates : YES
+    seen   : 0
+    action : delete
+
+localdovecot:
+ imaphost: homeserver.myhomedomain.com
+ auth: md5
+ archiveroot: Archives
+ archiverange: quarter
+ sourcefolder: 
+# Archive INBOX read items over 30 days old
+  - folder : INBOX
+    age    : 30
+    seen   : 1
+    action : archive
+# Archive ALL INBOX items over 90 days old
+  - folder : INBOX
+    age    : 90
+    seen   : 0
+    action : archive
+# Archive Sent Items over 14 days old
+  - folder : Sent Items
+    age    : 14
+    seen   : 0
+    ignorebaddates : YES
+    action : archive
+# Delete SPAM items over 1 day old
+  - folder : SPAM
+    age    : 1
+    seen   : 0
+    ignorebaddates : YES
+    action : delete
+# Delete Trash items over 90 days old
+  - folder : Trash
+    age    : 90
+    ignorebaddates : YES
+    seen   : 0
+    action : delete
+
+gmail:
+ imaphost: imap.gmail.com
+ imapssl: 1
+ auth: netrc
+ archiveroot: Archives
+ archiverange: year
+ sourcefolder:
+# Archive read items over 180 days old
+  - folder : INBOX
+    age    : 180
+    seen   : 1
+    action : archive
+# Archive Sent Messages over 30 days old
+  - folder : Sent Messages
+    age    : 30
+    seen   : 0
+    ignorebaddates : YES
+    action : archive
