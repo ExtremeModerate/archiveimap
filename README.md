@@ -48,8 +48,10 @@ DESCRIPTION
            143 when imapssl=0 or 993 when imapssl=1)
            auth: password|netrc|md5|cert - authentication type (only password
            and netrc work)
-           username: password - required for "password" auth, not for netrc
-           password: password - required for "password" auth, not for netrc
+           username: password - required for auth=password
+               Optional for auth=netrc to select a specific instance of
+               imaphost
+           password: password - required for auth=password, not for netrc
            archiveroot: root_folder - destination root folder for the archives
            sourcefolder: start the list of sourcefolders (literally the word
            sourcefolder)
@@ -64,11 +66,20 @@ DESCRIPTION
                        month = root.yyyy.sourcename-[01-12] directories
                        day = root.yyyy.mm.sourcename-[01-31] directories
                        to = root.sourcename.{basename of the "to" address}
-                       (Not yet implemented)
+                           -If there are multiple To: addresses in the message
+                           header, then an attempt is made to identify which
+                           of these addresses was used to actually deliver the
+                           message by searching the Received: for an email
+                           address that matches one of the To: addresses.
+                           -Only the User portion of the email address is used
+                           for the folder name, so bob@example.com will be
+                           filed into a directory named "bob".
+                           -Folder names are always converted to lowercase
                        from = root.sourcename.{basename of the "from" address}
                        (Not yet implemented)
-                   age: days - minimum age of messages to be archived,
-                   default=don't archive
+                   age: days - minimum age of messages to be archived
+                       If "0", then don't archive anything =item If "ALL",
+                       then archive all messages, regardless of date
                    seen: 0|1 - archive only "seen" messages? default=1
                    ignorebaddates: YES|NO - Delete messages with invalid
                    dates?  Only valid for "delete" actin default=NO

@@ -3,8 +3,9 @@
 #  imapssl : 0 or 1 use SSL for connection? 
 #  imapport: port number to connect to (if not provided, default to 143 when imapssl=0 or 993 when imapssl=1)
 #  auth: password|netrc|md5|cert - authentication type (only password and netrc work)
-#  username: password - required for "password" auth
-#  password: password - required for "password" auth
+#  username: password - required for auth=password
+#            optional for auth=netrc to select from multiple accounts to same imaphost
+#  password: password - required for auth=password
 #  archiveroot: root_folder - root folder for the archives
 #  sourcefolder: folder - source folder for archiving (defaults to INBOX)
 #  archiverange: year|quarter|month|day - how to format the 
@@ -22,7 +23,6 @@
 # Items in "Sent Items" over 30 days old, whether they've been read or not are archived
 # Items in "Deleted Items" over 90 days old, whether they've been read or not and regardless of
 #   whether dates are rational are marked as deleted.  If the -x option is used, they will be purged
-
 
 office365:
  imaphost: pod12345.outlook.com
@@ -80,16 +80,64 @@ localdovecot:
     seen   : 0
     action : delete
 
-gmail:
+###
+# example for a personal gmail account, using netrc with a specific username
+###
+gmail_personal:
  imaphost: imap.gmail.com
  imapssl: 1
  auth: netrc
+ username: homeaddress@gmail.com
  archiveroot: Archives
  archiverange: year
- sourcefolder:
+ sourcefolder: 
 # Archive read items over 180 days old
   - folder : INBOX
     age    : 180
+    seen   : 1
+    action : archive
+# Archive Sent Messages over 30 days old
+  - folder : Sent Messages
+    age    : 30
+    seen   : 0
+    ignorebaddates : YES
+    action : archive
+
+###
+# same account as above, but this one deletes from the SPAM and Junk folders
+# gets all messages, regardless of date
+###
+gmail_personal_spamremover:
+ imaphost: imap.gmail.com
+ imapssl: 1
+ auth: netrc
+ username: homeaddress@gmail.com
+ sourcefolder: 
+# Delete all messages from SPAM
+  - folder : SPAM
+    age    : ALL
+    seen   : 0
+    ignorebaddates : YES
+    action : delete
+# Delete all messages from Junk
+  - folder : Junk
+    age    : ALL
+    seen   : 0
+    ignorebaddates : YES
+    action : archive
+
+
+gmail_work:
+ imaphost: imap.gmail.com
+ imapssl: 1
+ auth: netrc
+ username: workaddress@gmail.com
+ archiveroot: Archives
+ archiverange: year
+ sourcefolder:
+# Archive read items over 60 days old
+  - folder : INBOX
+    age    : 60
     seen   : 1
     action : archive
 # Archive Sent Messages over 30 days old

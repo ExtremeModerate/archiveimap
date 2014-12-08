@@ -37,9 +37,12 @@ use Getopt::Std;
 use POSIX qw(strftime);
 use Mail::IMAPClient::BodyStructure;
 use Mail::IMAPClient;
+use Email::Address;
+use Data::Dumper;
 use Date::Parse;
 use YAML qw(Bless Dump);
 use Net::Netrc;
+use Domain::PublicSuffix;
 use Pod::Usage;
 
 my $debug = 0;
@@ -80,7 +83,8 @@ foreach $server (@ARGV) {
 	}
 
 	unless ($user && $pass) {
-		if ($host = Net::Netrc->lookup($imapserver)) {
+		$opt_v && print STDERR ".netrc lookup for $imapserver and $user\n";
+		if ($host = Net::Netrc->lookup($imapserver, $user)) {
 			if (! $user) {
 				$user = $host->login;
 			}
@@ -116,6 +120,7 @@ foreach $server (@ARGV) {
 			print STDERR "ERROR: Could not get separator: $@\n";
 			next;
 		}
+		$opt_v && print "The folder separator is $sepChar\n";
 		
 		$folderlist = $node->{sourcefolder};
 		foreach $foldernode (@$folderlist) {
@@ -129,7 +134,7 @@ foreach $server (@ARGV) {
 			if ($foldernode->{archiverange}) {
 				$archiverange = $foldernode->{archiverange};
 			}
-			if ($archiverange !~ /^(none|year|quarter|month|day)$/) {
+			if ($archiverange !~ /^(none|year|quarter|month|day|to|from)$/) {
 				$opt_v && print "Invalid range ($archiverange).  Skipping Folder.\n";
 				next;
 			}
@@ -152,14 +157,20 @@ foreach $server (@ARGV) {
 			if ($foldernode->{age}) {
 				$age = $foldernode->{age};
 			}
-			if ( $age <= 0 ) {
+			
+			if ($age eq "ALL") {
+				$searchtime = $now + (60*60*24);
+				$opt_v && print "ALL messages selected.\n";
+			} elsif ( $age < 0 ) {
 				print STDERR "ERROR: Age is zero or negative.  Skipping $server.\n";
 				next;
+			} else {
+				$opt_v && print "Age is $age\n";
+				$searchtime = $now - (60*60*24)*$age; # hey slackass, go look up the better way to do this
 			}
-			$searchtime = $now - (60*60*24)*$age; # hey slackass, go look up the better way to do this
 			$searchstr = Mail::IMAPClient->Rfc2060_date($searchtime);
 			$opt_v && print "Age for $folder is $age days, $searchstr\n";
-	
+
 			if ( $foldernode->{seen} ) {
 				$opt_v && print "Searching $folder for READ messages before $searchstr\n";
 				@recent = $imap->search("SEEN NOT DELETED SENTBEFORE $searchstr");
@@ -167,12 +178,63 @@ foreach $server (@ARGV) {
 				$opt_v && print "Searching $folder for ALL messages before $searchstr\n";
 				@recent = $imap->search("NOT DELETED SENTBEFORE $searchstr");
 			}
+			
 			$opt_v && print "Search found ", scalar(@recent), " items\n";
 			$moveditems = 0;
 			$totalitems = scalar(@recent);
 			foreach my $message (@recent) {
 				my $subject = $imap->subject($message);
 				my $send_date = $imap->date($message);
+				
+				###############
+				# Add to/from sorting
+				# get just the base from the email address
+				###############
+				
+				my $to_header = $imap->get_header($message, "To");
+				my @to_addrs = Email::Address->parse($to_header);
+				my %to_hash;
+				@to_hash{@to_addrs} = (); #make a hash with keys from the @to_addrs array
+				if (scalar(@to_addrs) > 1) { 
+					$to_address = $to_addrs[0]; # just default to the first one in case we don't find a match in the headers
+					# if multiple "to" addresses, loop try to locate one of them in the "Received" 
+					$opt_v && print STDERR "Found MANY addresses\n";
+					my $received_header = $imap->parse_headers($message, "Received");
+					my $received_headers = $received_header->{"Received"};
+					foreach $header (@$received_headers) {
+						#print "Received_header is ", $header, "\n";
+						my @header_emails = Email::Address->parse($header);
+						if (scalar(@header_emails)) {
+							my $header_address = $header_emails[0]->address;
+							if (exists($to_hash{$header_address})) {
+								$to_address = $header_emails[0];
+								$opt_v && print STDERR "\tTHIS MESSAGE IS TO $header_address\n";
+								last;
+							}
+						}
+					}
+				} elsif (scalar(@to_addrs) == 1) {
+					$opt_v && print STDERR "Found ONE address\n";
+					$to_address = $to_addrs[0];
+
+				} else {
+					$opt_v && print STDERR "Found NO addresses\n";
+					 $to_address = Email::Address->new(undef, "INVALID_TO@invalidaddress.com");
+				}
+				
+				$opt_v && print STDERR "To: ", $to_address->address, "\n";
+				$opt_v && print STDERR "\tTo User: ", $to_address->user, "\n";
+				$opt_v && print STDERR "\tTo Host: ", $to_address->host, "\n";
+
+				my $from_address = Email::Address->new(undef, $imap->get_header($message, "From"));
+				my $domainSuffix = Domain::PublicSuffix->new();
+				my $from_domain = $domainSuffix->get_root_domain($from_address->host);
+				
+				$opt_v && print STDERR "From: ", $from_address->address, "\n";
+				$opt_v && print STDERR "\tFrom User: ", $from_address->user, "\n";
+				$opt_v && print STDERR "\tFrom Host: ", $from_address->host, "\n";
+				$opt_v && print STDERR "\tFrom Host Domain: ", $from_domain, "\n";
+				
 				my $time = str2time($send_date);
 				($ss,$mm,$hh,$day,$month,$year,$zone) = strptime($send_date);
 				$year += 1900;
@@ -204,6 +266,10 @@ foreach $server (@ARGV) {
 					$destination=join($sepChar, $folderroot, $year, $month, $folder);
 				} elsif (($archiverange eq 'day') && $year && $month && $day) {
 					$destination=join($sepChar, $folderroot, $year, $month, $day, $folder);
+				} elsif (($archiverange eq "to") && $to_address) {
+					$destination=join($sepChar, $folderroot, $year, lc($to_address->user));
+				} elsif (($archiverange eq "from") && $from_domain) {
+					$destination=join($sepChar, $folderroot, $year, lc($from_domain));
 				} elsif ( $ignorebaddates ) {
 					$destination=join($sepChar, $folderroot, "$folder-Archive-BadDate");
 					$opt_v && print STDERR "WARNING: Invalid Date Part, Filing in $destination\n";
@@ -314,9 +380,15 @@ B<~/.archiveimaprc> is a YAML configuration file
 
 =item B<auth>: password|netrc|md5|cert - authentication type (only password and netrc work)
 
-=item B<username>: password - required for "password" auth, not for netrc
+=item B<username>: password - required for auth=password
 
-=item B<password>: password - required for "password" auth, not for netrc
+=over
+
+=item Optional for auth=netrc to select a specific instance of imaphost
+
+=back
+
+=item B<password>: password - required for auth=password, not for netrc
 
 =item B<archiveroot>: root_folder - destination root folder for the archives
 
@@ -342,13 +414,30 @@ B<~/.archiveimaprc> is a YAML configuration file
 
 =item day = root.yyyy.mm.sourcename-[01-31] directories
 
-=item to = root.sourcename.{basename of the "to" address} (Not yet implemented)
+=item to = root.sourcename.{basename of the "to" address}
+
+=over
+
+=item -If there are multiple B<To:> addresses in the message header, then an attempt is made to identify which of these addresses was used to actually deliver the message by searching the B<Received:> for an email address that matches one of the B<To:> addresses.
+
+=item -Only the B<User> portion of the email address is used for the folder name, so bob@example.com will be filed into a directory named "bob".
+
+=item -Folder names are always converted to lowercase
+ 
+=back
 
 =item from = root.sourcename.{basename of the "from" address} (Not yet implemented)
 
 =back
 
-=item B<age>: days - minimum age of messages to be archived, default=don't archive
+=item B<age>: days - minimum age of messages to be archived
+
+=over
+
+=item If "0", then don't archive anything
+=item If "ALL", then archive all messages, regardless of date
+
+=back
 
 =item B<seen>: 0|1 - archive only "seen" messages? default=1
 
