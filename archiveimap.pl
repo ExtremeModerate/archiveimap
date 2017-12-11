@@ -11,7 +11,7 @@
 # # password : imappassword #leave blank for netrc
 #  archiveroot: Archives
 #  archiverange: quarter # none, year, quarter, month, day
-#  sourcefolder: 
+#  sourcefolder:
 #   - folder : INBOX
 #     age    : 60
 #     seen   : 1			# 1=only move "seen" messages
@@ -27,7 +27,7 @@
 #     action : delete
 
 # requires some cpan installs
-# sudo cpan YAML 
+# sudo cpan YAML
 # sudo cpan Mail::IMAPClient
 
 
@@ -46,6 +46,17 @@ use Domain::PublicSuffix;
 use Pod::Usage;
 
 my $debug = 0;
+
+sub connectImap {
+	my ($imapserver, $user, $pass, $authmech, $ssl, $port, $debug) = @_;
+	my $imap;
+	if ($port) {
+		$imap = Mail::IMAPClient->new(Server=>$imapserver, User=>$user, Password=>$pass, Authmechanism=>$authmech, Ssl=>$ssl, Port=>$port, Debug=>$debug);
+	} else {
+		$imap = Mail::IMAPClient->new(Server=>$imapserver, User=>$user, Password=>$pass, Authmechanism=>$authmech, Ssl=>$ssl, Debug=>$debug);
+	}
+	return $imap;
+}
 
 getopts('hvtx');
 
@@ -72,7 +83,7 @@ $thisyear = strftime("%Y", localtime($now + 60*60*24*7)); # next week's year rea
 foreach $server (@ARGV) {
 	print "Processing $server\n";
 	$node = $hash->{$server};
-	
+
 	my $imapserver = $node->{imaphost};
 	# by default, use the username/password defined in the config
 	$user = $node->{username};
@@ -96,24 +107,24 @@ foreach $server (@ARGV) {
 			next;
 		}
 	}
-	
+
 	unless ($user && $pass) {
 		print STDERR "ERROR: I don't seem to have a username/password for $server\n";
 		next;
 	}
-	
+
 	my $folderroot = $node->{archiveroot};
-	
+
 	my $port = $node->{imapport};
 	my $ssl = $node->{imapssl};
-	my $imap;
-	if ($port) {
-		$imap = Mail::IMAPClient->new(Server=>$imapserver, User=>$user, Password=>$pass, Authmechanism=>$authmech, Ssl=>$ssl, Port=>$port, Debug=>$debug);
-	} else {
-		$imap = Mail::IMAPClient->new(Server=>$imapserver, User=>$user, Password=>$pass, Authmechanism=>$authmech, Ssl=>$ssl, Debug=>$debug);
-	}
+	my $imap = connectImap($imapserver, $user, $pass, $authmech, $ssl, $port, $debug);
+	# if ($port) {
+	# 	$imap = Mail::IMAPClient->new(Server=>$imapserver, User=>$user, Password=>$pass, Authmechanism=>$authmech, Ssl=>$ssl, Port=>$port, Debug=>$debug);
+	# } else {
+	# 	$imap = Mail::IMAPClient->new(Server=>$imapserver, User=>$user, Password=>$pass, Authmechanism=>$authmech, Ssl=>$ssl, Debug=>$debug);
+	# }
 	if ( $imap ) {
-	
+
 		$opt_v && print "Available Folders: ", join("\n",$imap->folders),"\n";
 
 		unless ($sepChar = $imap->separator() ) {
@@ -121,7 +132,7 @@ foreach $server (@ARGV) {
 			next;
 		}
 		$opt_v && print "The folder separator is $sepChar\n";
-		
+
 		$folderlist = $node->{sourcefolder};
 		foreach $foldernode (@$folderlist) {
 			$folder = $foldernode->{folder};
@@ -129,7 +140,7 @@ foreach $server (@ARGV) {
 				print STDERR "ERROR: cannot select the folder $folder for $user: $@\n";
 				next;
 			}
-			
+
 			$archiverange = $node->{archiverange};
 			if ($foldernode->{archiverange}) {
 				$archiverange = $foldernode->{archiverange};
@@ -138,7 +149,7 @@ foreach $server (@ARGV) {
 				$opt_v && print "Invalid range ($archiverange).  Skipping Folder.\n";
 				next;
 			}
-			
+
 			my $action = lc($foldernode->{action});
 			if ( $action =~ /^(archive|delete)$/ ) {
 				$opt_v && print "I will $action items in folder $folder.\n";
@@ -146,18 +157,18 @@ foreach $server (@ARGV) {
 				print STDERR "ERROR: Invalid Action ($action).  Skipping $server.\n";
 				next;
 			}
-			
+
 			$ignorebaddates = 0;
 			if ((lc($foldernode->{ignorebaddates}) eq 'yes') || (lc($node->{ignorebaddates}) eq 'yes')) {
 				$ignorebaddates = 1;
 				$opt_v && print "Ignoring bad dates for $folder\n";
 			}
-						
+
 			my $age = $node->{age};
 			if ($foldernode->{age}) {
 				$age = $foldernode->{age};
 			}
-			
+
 			if ($age eq "ALL") {
 				$searchtime = $now + (60*60*24);
 				$opt_v && print "ALL messages selected.\n";
@@ -178,26 +189,26 @@ foreach $server (@ARGV) {
 				$opt_v && print "Searching $folder for ALL messages before $searchstr\n";
 				@recent = $imap->search("NOT DELETED SENTBEFORE $searchstr");
 			}
-			
+
 			$opt_v && print "Search found ", scalar(@recent), " items\n";
 			$moveditems = 0;
 			$totalitems = scalar(@recent);
 			foreach my $message (@recent) {
 				my $subject = $imap->subject($message);
 				my $send_date = $imap->date($message);
-				
+
 				###############
 				# Add to/from sorting
 				# get just the base from the email address
 				###############
-				
+
 				my $to_header = $imap->get_header($message, "To");
 				my @to_addrs = Email::Address->parse($to_header);
 				my %to_hash;
 				@to_hash{@to_addrs} = (); #make a hash with keys from the @to_addrs array
-				if (scalar(@to_addrs) > 1) { 
+				if (scalar(@to_addrs) > 1) {
 					$to_address = $to_addrs[0]; # just default to the first one in case we don't find a match in the headers
-					# if multiple "to" addresses, loop try to locate one of them in the "Received" 
+					# if multiple "to" addresses, loop try to locate one of them in the "Received"
 					$opt_v && print STDERR "Found MANY addresses\n";
 					my $received_header = $imap->parse_headers($message, "Received");
 					my $received_headers = $received_header->{"Received"};
@@ -221,7 +232,7 @@ foreach $server (@ARGV) {
 					$opt_v && print STDERR "Found NO addresses\n";
 					 $to_address = Email::Address->new(undef, "INVALID_TO@invalidaddress.com");
 				}
-				
+
 				$opt_v && print STDERR "To: ", $to_address->address, "\n";
 				$opt_v && print STDERR "\tTo User: ", $to_address->user, "\n";
 				$opt_v && print STDERR "\tTo Host: ", $to_address->host, "\n";
@@ -229,12 +240,12 @@ foreach $server (@ARGV) {
 				my $from_address = Email::Address->new(undef, $imap->get_header($message, "From"));
 				my $domainSuffix = Domain::PublicSuffix->new();
 				my $from_domain = $domainSuffix->get_root_domain($from_address->host);
-				
+
 				$opt_v && print STDERR "From: ", $from_address->address, "\n";
 				$opt_v && print STDERR "\tFrom User: ", $from_address->user, "\n";
 				$opt_v && print STDERR "\tFrom Host: ", $from_address->host, "\n";
 				$opt_v && print STDERR "\tFrom Host Domain: ", $from_domain, "\n";
-				
+
 				my $time = str2time($send_date);
 				($ss,$mm,$hh,$day,$month,$year,$zone) = strptime($send_date);
 				$year += 1900;
@@ -267,7 +278,7 @@ foreach $server (@ARGV) {
 				} elsif (($archiverange eq 'day') && $year && $month && $day) {
 					$destination=join($sepChar, $folderroot, $year, $month, $day, $folder);
 				} elsif (($archiverange eq "to") && $to_address) {
-					$destination=join($sepChar, $folderroot, $year, lc($to_address->user));
+					$destination=join($sepChar, $folderroot, lc($to_address->user));
 				} elsif (($archiverange eq "from") && $from_domain) {
 					$destination=join($sepChar, $folderroot, $year, lc($from_domain));
 				} elsif ( $ignorebaddates ) {
@@ -282,13 +293,23 @@ foreach $server (@ARGV) {
 						$opt_v && print "Moving $message, $send_date to $destination\n";
 						$moveditems++;
 						if (! $opt_t) {
-							$imap->move("$destination", $message);
+							if ($imap->Unconnected()) {
+								$opt_v && print "Reconnecting for Move\n";
+								$imap = connectImap($imapserver, $user, $pass, $authmech, $ssl, $port, $debug) or last;
+							}
+							$imap->move("$destination", $message)
+								or last;
 						}
 					} elsif ($action eq "delete") {
 						$opt_v && print "Deleting $message, $subject\n";
 						$moveditems++;
 						if (! $opt_t) {
-							$imap->delete_message($message);
+							if ($imap->Unconnected()) {
+								$opt_v && print "Reconnecting for Delete\n";
+								$imap = connectImap($imapserver, $user, $pass, $authmech, $ssl, $port, $debug) or last;
+							}
+							$imap->delete_message($message)
+								or last;
 						}
 					}
 
@@ -300,6 +321,10 @@ foreach $server (@ARGV) {
 			if ($opt_x) { # don't do it as an "and" for better messaging
 				print "Expunging deleted items from folder $folder.\n";
 				if (! $opt_t) {
+					if ($imap->Unconnected()) {
+						$opt_v && print "Reconnecting for Purge\n";								
+						$imap = connectImap($imapserver, $user, $pass, $authmech, $ssl, $port, $debug) or last;
+					}
 					$imap->expunge();
 				}
 			} else {
@@ -359,7 +384,7 @@ list of mail server(s) to be archived.  This must match sources listed in the .a
 
 =head1 DESCRIPTION
 
-B<imaparchive.pl> uses your ~/.archiveimaprc configuration and, 
+B<imaparchive.pl> uses your ~/.archiveimaprc configuration and,
 for each imapsource provided, archive the email in the specified
 folders according to the criteria given.
 
@@ -374,7 +399,7 @@ B<~/.archiveimaprc> is a YAML configuration file
 
 =item B<imaphost>: hostname of the imap server
 
-=item B<imapssl>: 0 or 1 use SSL for connection? 
+=item B<imapssl>: 0 or 1 use SSL for connection?
 
 =item B<imapport>: port number to connect to (if not provided, default to 143 when imapssl=0 or 993 when imapssl=1)
 
@@ -402,7 +427,7 @@ B<~/.archiveimaprc> is a YAML configuration file
 
 =item B<action>: archive|delete - specifies the action to take for this folder
 
-=item B<archiverange>: year|quarter|month|day|to|from - defines the archive directory structure format 
+=item B<archiverange>: year|quarter|month|day|to|from - defines the archive directory structure format
 
 =over
 
@@ -423,7 +448,7 @@ B<~/.archiveimaprc> is a YAML configuration file
 =item -Only the B<User> portion of the email address is used for the folder name, so bob@example.com will be filed into a directory named "bob".
 
 =item -Folder names are always converted to lowercase
- 
+
 =back
 
 =item from = root.sourcename.{basename of the "from" address} (Not yet implemented)
@@ -453,13 +478,13 @@ B<~/.archiveimaprc> is a YAML configuration file
 
 =head1 CONFIGURATION EXAMPLE
 
-The following configuration for the imapsource B<exchange> would archive items in the folder INBOX 
-that have been read and are 30 days or older.  These would be copied into the imap directory 
+The following configuration for the imapsource B<exchange> would archive items in the folder INBOX
+that have been read and are 30 days or older.  These would be copied into the imap directory
 /Archives/YYYY/INBOX-Q# where YYYY and Q# are the year and quarter of the mail item's date.
 
-Items in the same server, folder SPAM that are 30 days or older, whether they've been 
+Items in the same server, folder SPAM that are 30 days or older, whether they've been
 read or not, and any items in that folder which have invalid dates would be marked for deletion.  If
-the -x option was specified then these would be purged from the folder permanently. 
+the -x option was specified then these would be purged from the folder permanently.
 
 exchange:
  imaphost: exchangeserver.mydomain.com
@@ -468,7 +493,7 @@ exchange:
  password:
  archiveroot: Archives
  archiverange: quarter
- sourcefolder: 
+ sourcefolder:
   - folder : INBOX
     age    : 30
     seen   : 1
@@ -484,4 +509,3 @@ Then just use the nickname "exchange" when running
 
 
 =cut
-
