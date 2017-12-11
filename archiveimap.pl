@@ -321,11 +321,11 @@ foreach $server (@ARGV) {
 			if ($opt_x) { # don't do it as an "and" for better messaging
 				print "Expunging deleted items from folder $folder.\n";
 				if (! $opt_t) {
-					if ($imap->Unconnected()) {
-						$opt_v && print "Reconnecting for Purge\n";								
-						$imap = connectImap($imapserver, $user, $pass, $authmech, $ssl, $port, $debug) or last;
+					$imap->disconnect();
+					$opt_v && print "Reconnecting for Purge\n";
+					if ($imap = connectImap($imapserver, $user, $pass, $authmech, $ssl, $port, $debug)) {
+						$imap->expunge();
 					}
-					$imap->expunge();
 				}
 			} else {
 				print "Retaining deleted items in folder $folder.\n";
