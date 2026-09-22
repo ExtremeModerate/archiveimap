@@ -1,0 +1,31 @@
+{
+  "name": "archiveimap",
+  "version": "2.0.0",
+  "description": "Moves IMAP hosted messages to structured archive folders, configurable per source folder. Supports Gmail OAuth2 logins.",
+  "type": "module",
+  "bin": {
+    "archiveimap": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "test": "tsc && node --test dist/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "google-auth-library": "^10.9.1",
+    "imapflow": "^2.0.6",
+    "psl": "^1.15.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
+  }
+}
