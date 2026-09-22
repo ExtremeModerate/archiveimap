@@ -23,7 +23,8 @@ archiveimap --login imapsource ...
 
   -h, --help       Print help and list the sources in your config
   -v, --verbose    Verbose messaging
-  -t, --test       SAFE mode - no changes applied (use with -v)
+  -t, --test       SAFE mode - no changes applied (use with -v); ends by listing
+                   the archive folders a real run would create
   -x, --expunge    Purge deleted items at end of each folder
   -c, --config     Use a config file other than ~/.archiveimap/config.yaml
       --login      (Re)authorize Gmail OAuth sources in a browser, then exit

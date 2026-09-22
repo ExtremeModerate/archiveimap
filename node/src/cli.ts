@@ -51,6 +51,7 @@ async function main(): Promise<number> {
   if (opt.test) console.log('---------- SAFE MODE ----------');
 
   let failures = 0;
+  const wouldCreate = new Map<string, Set<string>>();
   for (const name of sources) {
     const raw = config.sources[name];
     if (!raw) {
@@ -74,10 +75,13 @@ async function main(): Promise<number> {
       console.log(`Processing ${name}`);
       const auth = await credentialsFor(source, { interactive: Boolean(process.stdin.isTTY) }, verbose);
       session = new ImapSession(source, auth, verbose, opt.debug);
+      const folders = new Set<string>();
+      wouldCreate.set(name, folders);
       await session.connect();
       await archiveSource(session, source, raw, {
         dryRun: Boolean(opt.test),
         global: config.global,
+        wouldCreate: folders,
         expunge: Boolean(opt.expunge),
         verbose,
         warn,
@@ -87,6 +91,13 @@ async function main(): Promise<number> {
       failures++;
     } finally {
       await session?.logout().catch(() => {});
+    }
+  }
+
+  if (opt.test) {
+    for (const [name, folders] of wouldCreate) {
+      console.log(`\nFolders that would be created for ${name}:${folders.size ? '' : ' none'}`);
+      for (const folder of [...folders].sort()) console.log(`\t${folder}`);
     }
   }
   return failures ? 1 : 0;

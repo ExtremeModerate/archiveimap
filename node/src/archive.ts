@@ -8,6 +8,8 @@ const FETCH_BATCH = 500;
 
 export interface RunOptions {
   dryRun: boolean;
+  /** In dry-run mode, collects the folders that a real run would create */
+  wouldCreate: Set<string>;
   global: GlobalConfig;
   expunge: boolean;
   verbose: Log;
@@ -101,6 +103,7 @@ async function archiveFolder(session: ImapSession, source: Source, rule: FolderR
 
       for (const [dest, group] of plan) {
         if (!opts.dryRun) await apply(session, rule, ctx, dest, group, gmailTrash);
+        else if (rule.action === 'archive') noteWouldCreate(ctx, dest, opts.wouldCreate);
         processed += group.length;
       }
     }
@@ -118,6 +121,15 @@ async function archiveFolder(session: ImapSession, source: Source, rule: FolderR
   if (opts.dryRun) return;
   const deleted = (await session.run(() => session.client.search({ deleted: true }, { uid: true }))) || [];
   if (deleted.length) await session.run(() => session.client.messageDelete(deleted.join(','), { uid: true }));
+}
+
+/** Records `dest` and any missing parent folders, since creating it creates them too. */
+function noteWouldCreate(ctx: FolderContext, dest: string, wouldCreate: Set<string>) {
+  const parts = dest.split(ctx.separator);
+  for (let i = 1; i <= parts.length; i++) {
+    const path = parts.slice(0, i).join(ctx.separator);
+    if (!ctx.mailboxes.has(path)) wouldCreate.add(path);
+  }
 }
 
 /** Decides where one message goes; undefined means leave it alone. */
