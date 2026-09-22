@@ -54,6 +54,31 @@ New in this version:
 | `oauthclient` | Path to the OAuth client JSON downloaded from Google Cloud. Defaults to `~/.archiveimap/google-client.json`. |
 | `oauthclientid` / `oauthclientsecret` | The client credentials inline, instead of a file. You can also set the `ARCHIVEIMAP_GOOGLE_CLIENT_ID` and `ARCHIVEIMAP_GOOGLE_CLIENT_SECRET` environment variables. |
 
+### Global settings
+
+A top-level `global` section holds settings that apply to every source. `global` is
+therefore a reserved name and can't be used as a source.
+
+```yaml
+global:
+ fulladdressdomains:
+  - gmail.com
+  - yahoo.com
+  - outlook.com
+```
+
+`fulladdressdomains` changes how `archiverange: from` names folders. Normally a message
+is filed under the sender's domain, e.g. `Archives/2024/example.com`. That lumps every
+sender from a shared webmail domain into one folder. For senders at a listed domain, or
+any of its subdomains, the full address is used instead:
+`Archives/2024/bobuser@gmail.com`.
+
+`@` is legal in IMAP folder names and works on Gmail, Dovecot and Exchange. If the server
+refuses to create a folder containing `@` (e.g. Cyrus with virtual domains), it is
+created with `_` instead: `Archives/2024/bobuser_gmail.com`. On servers whose folder
+separator is `.`, dots in address-based names become `_` as well, so that
+`bob.user@gmail.com` stays one folder rather than nesting.
+
 ### Gmail setup (one time)
 
 1. In the [Google Cloud console](https://console.cloud.google.com/), create a project and
@@ -110,7 +135,10 @@ empties after 30 days. Deleting from Trash or Spam flags the messages as deleted
 - If `seen` is omitted it defaults to `1` (only archive read messages), as the Perl
   documentation says. The Perl code actually defaulted to all messages.
 - An `age` of `0` or no `age` skips the folder, as the Perl documentation says.
-- `from` sorting is implemented: `root/yyyy/<sender's registrable domain>`.
+- `from` sorting is implemented: `root/yyyy/<sender's registrable domain>`, or the full
+  sender address for domains listed in `global.fulladdressdomains`.
+- Folder names built from addresses (`to` and `from`) never contain the server's folder
+  separator; it is replaced with `_`.
 - To: address matching against Received: headers ignores case.
 - `auth: md5` (CRAM-MD5) isn't supported by the IMAP library, so it falls back to a normal
   login with a warning.

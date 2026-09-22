@@ -36,7 +36,8 @@ export interface DestinationInput {
   folder: string;
   date: DateParts;
   toUser?: string;
-  fromDomain?: string;
+  /** Sender's registrable domain, or full address for fulladdressdomains senders */
+  fromName?: string;
   ignoreBadDates: boolean;
 }
 
@@ -47,6 +48,8 @@ export interface DestinationInput {
 export function destinationFor(i: DestinationInput): string | undefined {
   const { year, month, quarter, day } = i.date;
   const join = (...parts: (string | number)[]) => [i.root, ...parts].join(i.separator);
+  // an address-derived name is one folder, so it mustn't contain the hierarchy separator
+  const leaf = (name: string) => name.toLowerCase().split(i.separator).join('_');
 
   switch (i.range) {
     case 'none':
@@ -64,10 +67,10 @@ export function destinationFor(i: DestinationInput): string | undefined {
       if (year && month && day) return join(year, month, day, i.folder);
       break;
     case 'to':
-      if (i.toUser) return join(i.toUser.toLowerCase());
+      if (i.toUser) return join(leaf(i.toUser));
       break;
     case 'from':
-      if (year && i.fromDomain) return join(year, i.fromDomain.toLowerCase());
+      if (year && i.fromName) return join(year, leaf(i.fromName));
       break;
   }
   return i.ignoreBadDates ? join(`${i.folder}-Archive-BadDate`) : undefined;
@@ -100,6 +103,18 @@ export const hostPart = (address: string) => address.slice(address.lastIndexOf('
 export function rootDomain(address: string | undefined): string | undefined {
   if (!address || !address.includes('@')) return undefined;
   return psl.get(hostPart(address).toLowerCase()) ?? undefined;
+}
+
+/**
+ * Folder name for `from` filing: the sender's registrable domain, or the whole address
+ * when the sender's domain (or a parent of it) is in `fullAddressDomains`, so that
+ * e.g. every gmail.com sender gets a folder of their own.
+ */
+export function fromFolderName(address: string | undefined, fullAddressDomains: string[]): string | undefined {
+  if (!address || !address.includes('@')) return undefined;
+  const host = hostPart(address).toLowerCase();
+  if (fullAddressDomains.some((d) => host === d || host.endsWith(`.${d}`))) return address.toLowerCase();
+  return rootDomain(address);
 }
 
 /** Returns the unfolded values of every occurrence of `name` in a raw header block. */

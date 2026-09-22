@@ -1,13 +1,14 @@
 import type { FetchMessageObject } from 'imapflow';
-import { resolveFolderRule, type FolderRule, type RawSource, type Source } from './config.js';
+import { resolveFolderRule, type FolderRule, type GlobalConfig, type RawSource, type Source } from './config.js';
 import type { ImapSession, Log } from './imap.js';
-import { dateParts, deliveredTo, destinationFor, headerValues, rootDomain, userPart } from './message.js';
+import { dateParts, deliveredTo, destinationFor, fromFolderName, headerValues, userPart } from './message.js';
 
 const DAY_MS = 86400_000;
 const FETCH_BATCH = 500;
 
 export interface RunOptions {
   dryRun: boolean;
+  global: GlobalConfig;
   expunge: boolean;
   verbose: Log;
   warn: Log;
@@ -16,6 +17,8 @@ export interface RunOptions {
 interface FolderContext {
   separator: string;
   mailboxes: Set<string>;
+  /** Archive folders the server refused, mapped to the name used instead */
+  renamed: Map<string, string>;
   trash?: string;
   junk?: string;
 }
@@ -32,6 +35,7 @@ export async function archiveSource(session: ImapSession, source: Source, raw: R
   const ctx: FolderContext = {
     separator,
     mailboxes: new Set(list.map((m) => m.path)),
+    renamed: new Map(),
     trash: list.find((m) => m.specialUse === '\\Trash')?.path,
     junk: list.find((m) => m.specialUse === '\\Junk')?.path,
   };
@@ -124,7 +128,7 @@ function planMessage(
   ctx: FolderContext,
   cutoff: Date,
   now: Date,
-  { verbose }: RunOptions,
+  { verbose, global }: RunOptions,
 ): string | undefined {
   const env = msg.envelope ?? {};
   const subject = env.subject ?? '';
@@ -135,8 +139,8 @@ function planMessage(
   const toAddrs = (env.to ?? []).map((a) => a.address ?? '').filter(Boolean);
   const toAddress = deliveredTo(toAddrs, headerValues(msg.headers, 'received'));
   const fromAddress = env.from?.[0]?.address;
-  const fromDomain = rootDomain(fromAddress);
-  verbose(`To: ${toAddress}  From: ${fromAddress ?? ''} (${fromDomain ?? ''})`);
+  const fromName = fromFolderName(fromAddress, global.fullAddressDomains);
+  verbose(`To: ${toAddress}  From: ${fromAddress ?? ''} (${fromName ?? ''})`);
 
   let dest: string | undefined;
   if (rule.action === 'archive') {
@@ -147,7 +151,7 @@ function planMessage(
       folder: rule.folder,
       date: parts,
       toUser: userPart(toAddress),
-      fromDomain,
+      fromName,
       ignoreBadDates: rule.ignoreBadDates,
     });
   } else {
@@ -179,15 +183,30 @@ async function apply(session: ImapSession, rule: FolderRule, ctx: FolderContext,
     return;
   }
 
-  if (!ctx.mailboxes.has(dest)) {
-    try {
-      await session.run(() => session.client.mailboxCreate(dest.split(ctx.separator)));
-    } catch (err) {
-      // most likely it already exists under a different case; the MOVE will tell
-      session.verbose(`Could not create ${dest}: ${(err as Error).message}`);
+  const target = await ensureMailbox(session, ctx, ctx.renamed.get(dest) ?? dest);
+  if (target !== dest) ctx.renamed.set(dest, target);
+  const ok = await session.run(() => session.client.messageMove(range, target, { uid: true }));
+  if (!ok) throw new Error(`could not move messages to ${target}`);
+}
+
+/**
+ * Creates an archive folder if needed and returns the name to use.  Some servers (e.g.
+ * Cyrus with virtual domains) reject '@' in folder names; those get '_' instead.
+ */
+async function ensureMailbox(session: ImapSession, ctx: FolderContext, path: string): Promise<string> {
+  if (ctx.mailboxes.has(path)) return path;
+  try {
+    // imapflow treats ALREADYEXISTS as success, so a failure here is a real refusal
+    await session.run(() => session.client.mailboxCreate(path.split(ctx.separator)));
+  } catch (err) {
+    const alt = path.replaceAll('@', '_');
+    if (alt !== path) {
+      session.verbose(`Server refused ${path} (${(err as Error).message}), using ${alt}`);
+      return ensureMailbox(session, ctx, alt);
     }
-    ctx.mailboxes.add(dest);
+    // the MOVE will report anything that really matters
+    session.verbose(`Could not create ${path}: ${(err as Error).message}`);
   }
-  const ok = await session.run(() => session.client.messageMove(range, dest, { uid: true }));
-  if (!ok) throw new Error(`could not move messages to ${dest}`);
+  ctx.mailboxes.add(path);
+  return path;
 }

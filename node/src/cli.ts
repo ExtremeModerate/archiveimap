@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { archiveSource } from './archive.js';
-import { defaultConfigPath, loadConfig, resolveSource, type RawConfig } from './config.js';
+import { defaultConfigPath, loadConfig, resolveSource, type Config } from './config.js';
 import { credentialsFor, ImapSession } from './imap.js';
 
 const USAGE = `Usage: archiveimap -[htvx] [--config file] imapsource ...
@@ -33,7 +33,7 @@ async function main(): Promise<number> {
   });
 
   const configPath = opt.config ?? defaultConfigPath();
-  let config: RawConfig;
+  let config: Config;
   try {
     config = loadConfig(configPath);
   } catch (err) {
@@ -42,7 +42,7 @@ async function main(): Promise<number> {
   }
 
   if (opt.help || sources.length === 0) {
-    console.log(`${USAGE}\n\nYour ${configPath} file contains the following sources:\n\t${Object.keys(config).join('\n\t')}`);
+    console.log(`${USAGE}\n\nYour ${configPath} file contains the following sources:\n\t${Object.keys(config.sources).join('\n\t')}`);
     return opt.help ? 0 : 1;
   }
 
@@ -52,7 +52,7 @@ async function main(): Promise<number> {
 
   let failures = 0;
   for (const name of sources) {
-    const raw = config[name];
+    const raw = config.sources[name];
     if (!raw) {
       warn(`ERROR: ${name} is not defined in ${configPath}`);
       failures++;
@@ -77,6 +77,7 @@ async function main(): Promise<number> {
       await session.connect();
       await archiveSource(session, source, raw, {
         dryRun: Boolean(opt.test),
+        global: config.global,
         expunge: Boolean(opt.expunge),
         verbose,
         warn,

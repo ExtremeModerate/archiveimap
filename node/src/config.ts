@@ -37,7 +37,22 @@ export interface RawSource {
   oauthclientsecret?: string;
 }
 
-export type RawConfig = Record<string, RawSource>;
+/** The reserved top-level `global` section of the config file */
+export interface RawGlobal {
+  /** Senders at these domains are filed by full address under archiverange: from */
+  fulladdressdomains?: string[];
+}
+
+export const GLOBAL_KEY = 'global';
+
+export interface GlobalConfig {
+  fullAddressDomains: string[];
+}
+
+export interface Config {
+  global: GlobalConfig;
+  sources: Record<string, RawSource>;
+}
 
 export interface FolderRule {
   folder: string;
@@ -75,7 +90,7 @@ export function defaultConfigPath(): string {
 /** Where the Perl version (and earlier releases of this one) kept the config */
 const legacyConfigPath = () => join(homedir(), '.archiveimaprc');
 
-export function loadConfig(path = defaultConfigPath()): RawConfig {
+export function loadConfig(path = defaultConfigPath()): Config {
   if (!existsSync(path) && path === defaultConfigPath() && existsSync(legacyConfigPath())) {
     throw new Error(`not found. Move your ${legacyConfigPath()} there, or pass it with -c`);
   }
@@ -83,7 +98,16 @@ export function loadConfig(path = defaultConfigPath()): RawConfig {
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
     throw new Error(`${path} does not contain a YAML mapping of sources`);
   }
-  return doc as RawConfig;
+  const { [GLOBAL_KEY]: rawGlobal, ...sources } = doc as Record<string, unknown>;
+  return { global: resolveGlobal((rawGlobal ?? {}) as RawGlobal), sources: sources as Record<string, RawSource> };
+}
+
+export function resolveGlobal(raw: RawGlobal): GlobalConfig {
+  const domains = raw.fulladdressdomains ?? [];
+  if (!Array.isArray(domains)) throw new Error(`${GLOBAL_KEY}.fulladdressdomains must be a list of domains`);
+  return {
+    fullAddressDomains: domains.map((d) => String(d).trim().toLowerCase().replace(/^@/, '')).filter(Boolean),
+  };
 }
 
 function truthy(v: unknown): boolean {

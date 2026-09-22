@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolveFolderRule, resolveSource } from './config.js';
-import { dateParts, deliveredTo, destinationFor, headerValues, INVALID_TO, rootDomain, userPart } from './message.js';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { loadConfig, resolveFolderRule, resolveGlobal, resolveSource } from './config.js';
+import { dateParts, deliveredTo, destinationFor, fromFolderName, headerValues, INVALID_TO, rootDomain, userPart } from './message.js';
 import { parseNetrc } from './netrc.js';
 
 const now = new Date(2026, 8, 22);
@@ -19,7 +22,7 @@ test('dateParts splits a date and rejects implausible years', () => {
 test('destinationFor builds each archive range', () => {
   const date = dateParts(new Date(2024, 4, 7), now);
   const dest = (range: Parameters<typeof destinationFor>[0]['range']) =>
-    destinationFor({ ...base, range, date, toUser: 'Bob', fromDomain: 'Example.com' });
+    destinationFor({ ...base, range, date, toUser: 'Bob', fromName: 'Example.com' });
   assert.equal(dest('none'), 'Archives');
   assert.equal(dest('year'), 'Archives/2024/INBOX');
   assert.equal(dest('quarter'), 'Archives/2024/INBOX-Q2');
@@ -95,4 +98,32 @@ test('resolveFolderRule applies defaults and validation', () => {
   assert.throws(() => resolveFolderRule({ action: 'archive', archiverange: 'week', age: 3 }, src), /Invalid range/);
   assert.throws(() => resolveFolderRule({ action: 'archive', age: 3 }, {}), /archiveroot/);
   assert.throws(() => resolveFolderRule({ action: 'delete' }, {}), /nothing to archive/);
+});
+
+test('fromFolderName uses the full address for fulladdressdomains senders', () => {
+  const full = ['gmail.com', 'example.org'];
+  assert.equal(fromFolderName('BobUser@Gmail.com', full), 'bobuser@gmail.com');
+  assert.equal(fromFolderName('news@lists.example.org', full), 'news@lists.example.org');
+  assert.equal(fromFolderName('news@mail.news.example.co.uk', full), 'example.co.uk');
+  assert.equal(fromFolderName('someone@notgmail.com', full), 'notgmail.com');
+  assert.equal(fromFolderName(undefined, full), undefined);
+});
+
+test('destinationFor keeps address-derived names to a single folder level', () => {
+  const date = dateParts(new Date(2024, 4, 7), now);
+  const from = (separator: string) =>
+    destinationFor({ ...base, separator, range: 'from', date, fromName: 'bob.user@gmail.com' });
+  assert.equal(from('/'), 'Archives/2024/bob.user@gmail.com');
+  assert.equal(from('.'), 'Archives.2024.bob_user@gmail_com');
+  assert.equal(destinationFor({ ...base, separator: '.', range: 'to', date, toUser: 'Jane.Doe' }), 'Archives.jane_doe');
+});
+
+test('loadConfig separates the global section from sources', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'archiveimap-')), 'config.yaml');
+  writeFileSync(file, 'global:\n fulladdressdomains: [Gmail.com, "@yahoo.com"]\nhome:\n imaphost: mail.example.com\n');
+  const config = loadConfig(file);
+  assert.deepEqual(config.global.fullAddressDomains, ['gmail.com', 'yahoo.com']);
+  assert.deepEqual(Object.keys(config.sources), ['home']);
+  assert.deepEqual(resolveGlobal({}).fullAddressDomains, []);
+  assert.throws(() => resolveGlobal({ fulladdressdomains: 'gmail.com' as unknown as string[] }), /must be a list/);
 });
