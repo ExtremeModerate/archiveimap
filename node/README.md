@@ -1,7 +1,7 @@
 # archiveimap (Node.js / TypeScript)
 
 A TypeScript port of `archiveimap.pl`. It moves IMAP messages into structured archive
-folders, using the same `~/.archiveimaprc` file as the Perl version. It adds **Gmail OAuth2
+folders, using the same configuration format as the Perl version. It adds **Gmail OAuth2
 logins**, so Gmail works without an app password.
 
 ## Install
@@ -25,12 +25,22 @@ archiveimap --login imapsource ...
   -v, --verbose    Verbose messaging
   -t, --test       SAFE mode - no changes applied (use with -v)
   -x, --expunge    Purge deleted items at end of each folder
-  -c, --config     Use a config file other than ~/.archiveimaprc
+  -c, --config     Use a config file other than ~/.archiveimap/config.yaml
       --login      (Re)authorize Gmail OAuth sources in a browser, then exit
       --debug      Log the IMAP protocol exchange
 ```
 
 ## Configuration
+
+The configuration lives in `~/.archiveimap/config.yaml`, next to the Gmail OAuth files.
+It uses the same YAML format as the Perl version's `~/.archiveimaprc`, so you can move
+that file straight over:
+
+```sh
+mkdir -p ~/.archiveimap && mv ~/.archiveimaprc ~/.archiveimap/config.yaml
+```
+
+To use a file somewhere else, pass it with `-c`.
 
 All the settings from the Perl version still work: `imaphost`, `imapssl`, `imapport`,
 `auth`, `username`, `password`, `archiveroot`, `archiverange`, `sourcefolder`, `folder`,
@@ -93,6 +103,7 @@ empties after 30 days. Deleting from Trash or Spam flags the messages as deleted
 
 ## Differences from the Perl version
 
+- The config file is `~/.archiveimap/config.yaml` instead of `~/.archiveimaprc`.
 - Messages are addressed by UID and moved in batches, one MOVE per destination folder,
   instead of one command per message. Dropped connections reconnect and retry
   automatically.

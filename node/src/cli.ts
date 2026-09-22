@@ -8,13 +8,13 @@ const USAGE = `Usage: archiveimap -[htvx] [--config file] imapsource ...
        archiveimap --login imapsource ...
 
 Moves IMAP hosted messages to structured archive folders, per the sources
-defined in ~/.archiveimaprc.
+defined in ~/.archiveimap/config.yaml.
 
   -h, --help       Print this help message
   -v, --verbose    Use verbose messaging during execution
   -t, --test       SAFE mode - no changes applied. Usually used with -v
   -x, --expunge    Purge deleted items at end of run
-  -c, --config     Use a configuration file other than ~/.archiveimaprc
+  -c, --config     Use a configuration file other than ~/.archiveimap/config.yaml
       --login      (Re)authorize Gmail OAuth sources in a browser, then exit
       --debug      Log the IMAP protocol exchange`;
 

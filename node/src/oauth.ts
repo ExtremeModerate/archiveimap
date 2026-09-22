@@ -3,16 +3,14 @@ import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CodeChallengeMethod, OAuth2Client, type Credentials } from 'google-auth-library';
-import type { Source } from './config.js';
+import { stateDir, type Source } from './config.js';
 
 /** Full IMAP access; Gmail's IMAP server accepts no narrower scope. */
 const GMAIL_SCOPE = 'https://mail.google.com/';
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
 
-export const stateDir = () => join(homedir(), '.archiveimap');
 const defaultClientFile = () => join(stateDir(), 'google-client.json');
 const tokenFile = (username: string) =>
   join(stateDir(), 'tokens', `${username.toLowerCase().replace(/[^a-z0-9@._-]/g, '_')}.json`);

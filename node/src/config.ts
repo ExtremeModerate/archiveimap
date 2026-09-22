@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'yaml';
@@ -8,7 +8,7 @@ export type ArchiveRange = (typeof ARCHIVE_RANGES)[number];
 
 export type AuthType = 'password' | 'netrc' | 'md5' | 'cert' | 'oauth2';
 
-/** One entry of the `sourcefolder` list, as written in ~/.archiveimaprc */
+/** One entry of the `sourcefolder` list, as written in the config file */
 export interface RawFolderRule {
   folder?: string;
   action?: string;
@@ -18,7 +18,7 @@ export interface RawFolderRule {
   ignorebaddates?: string | boolean;
 }
 
-/** One top-level account in ~/.archiveimaprc */
+/** One top-level account in the config file */
 export interface RawSource {
   imaphost?: string;
   imapssl?: number | boolean;
@@ -65,11 +65,20 @@ export interface Source {
 
 export const GMAIL_HOST = 'imap.gmail.com';
 
+/** Holds the config file, the Google OAuth client and saved tokens */
+export const stateDir = () => join(homedir(), '.archiveimap');
+
 export function defaultConfigPath(): string {
-  return join(homedir(), '.archiveimaprc');
+  return join(stateDir(), 'config.yaml');
 }
 
+/** Where the Perl version (and earlier releases of this one) kept the config */
+const legacyConfigPath = () => join(homedir(), '.archiveimaprc');
+
 export function loadConfig(path = defaultConfigPath()): RawConfig {
+  if (!existsSync(path) && path === defaultConfigPath() && existsSync(legacyConfigPath())) {
+    throw new Error(`not found. Move your ${legacyConfigPath()} there, or pass it with -c`);
+  }
   const doc = parse(readFileSync(path, 'utf8')) as unknown;
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
     throw new Error(`${path} does not contain a YAML mapping of sources`);
