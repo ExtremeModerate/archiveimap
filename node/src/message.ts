@@ -36,8 +36,8 @@ export interface DestinationInput {
   folder: string;
   date: DateParts;
   toUser?: string;
-  /** Sender's registrable domain, or full address for fulladdressdomains senders */
-  fromName?: string;
+  /** Sender's registrable domain, or [listed domain, address] for fulladdressdomains senders */
+  fromFolders?: string[];
   ignoreBadDates: boolean;
 }
 
@@ -70,7 +70,7 @@ export function destinationFor(i: DestinationInput): string | undefined {
       if (i.toUser) return join(leaf(i.toUser));
       break;
     case 'from':
-      if (year && i.fromName) return join(year, leaf(i.fromName));
+      if (year && i.fromFolders?.length) return join(year, ...i.fromFolders.map(leaf));
       break;
   }
   return i.ignoreBadDates ? join(`${i.folder}-Archive-BadDate`) : undefined;
@@ -106,15 +106,20 @@ export function rootDomain(address: string | undefined): string | undefined {
 }
 
 /**
- * Folder name for `from` filing: the sender's registrable domain, or the whole address
- * when the sender's domain (or a parent of it) is in `fullAddressDomains`, so that
- * e.g. every gmail.com sender gets a folder of their own.
+ * Folder path for `from` filing: the sender's registrable domain, or, when the sender's
+ * domain (or a parent of it) is in `fullAddressDomains`, that listed domain with a
+ * subfolder per sender address, e.g. ['gmail.com', 'bob@list.gmail.com'].
  */
-export function fromFolderName(address: string | undefined, fullAddressDomains: string[]): string | undefined {
+export function fromFolders(address: string | undefined, fullAddressDomains: string[]): string[] | undefined {
   if (!address || !address.includes('@')) return undefined;
   const host = hostPart(address).toLowerCase();
-  if (fullAddressDomains.some((d) => host === d || host.endsWith(`.${d}`))) return address.toLowerCase();
-  return rootDomain(address);
+  // the most specific listed domain wins, so list.gmail.com can be listed beside gmail.com
+  const listed = fullAddressDomains
+    .filter((d) => host === d || host.endsWith(`.${d}`))
+    .sort((a, b) => b.length - a.length)[0];
+  if (listed) return [listed, address.toLowerCase()];
+  const domain = rootDomain(address);
+  return domain ? [domain] : undefined;
 }
 
 /** Returns the unfolded values of every occurrence of `name` in a raw header block. */

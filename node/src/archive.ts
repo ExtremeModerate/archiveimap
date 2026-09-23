@@ -1,7 +1,7 @@
 import type { FetchMessageObject } from 'imapflow';
 import { resolveFolderRule, type FolderRule, type GlobalConfig, type RawSource, type Source } from './config.js';
 import type { ImapSession, Log } from './imap.js';
-import { dateParts, deliveredTo, destinationFor, fromFolderName, headerValues, userPart } from './message.js';
+import { dateParts, deliveredTo, destinationFor, fromFolders, headerValues, userPart } from './message.js';
 
 const DAY_MS = 86400_000;
 const FETCH_BATCH = 500;
@@ -151,8 +151,8 @@ function planMessage(
   const toAddrs = (env.to ?? []).map((a) => a.address ?? '').filter(Boolean);
   const toAddress = deliveredTo(toAddrs, headerValues(msg.headers, 'received'));
   const fromAddress = env.from?.[0]?.address;
-  const fromName = fromFolderName(fromAddress, global.fullAddressDomains);
-  verbose(`To: ${toAddress}  From: ${fromAddress ?? ''} (${fromName ?? ''})`);
+  const fromPath = fromFolders(fromAddress, global.fullAddressDomains);
+  verbose(`To: ${toAddress}  From: ${fromAddress ?? ''} (${fromPath?.join(ctx.separator) ?? ''})`);
 
   let dest: string | undefined;
   if (rule.action === 'archive') {
@@ -163,7 +163,7 @@ function planMessage(
       folder: rule.folder,
       date: parts,
       toUser: userPart(toAddress),
-      fromName,
+      fromFolders: fromPath,
       ignoreBadDates: rule.ignoreBadDates,
     });
   } else {

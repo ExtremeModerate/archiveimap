@@ -71,14 +71,79 @@ global:
 `fulladdressdomains` changes how `archiverange: from` names folders. Normally a message
 is filed under the sender's domain, e.g. `Archives/2024/example.com`. That lumps every
 sender from a shared webmail domain into one folder. For senders at a listed domain, or
-any of its subdomains, the full address is used instead:
-`Archives/2024/bobuser@gmail.com`.
+any of its subdomains, the listed domain becomes a parent folder with a subfolder for
+each sender address:
+
+```
+Archives/2024/gmail.com/bobuser@gmail.com
+Archives/2024/gmail.com/anothersender@list.gmail.com
+```
+
+If both a domain and one of its subdomains are listed, the more specific one is used.
 
 `@` is legal in IMAP folder names and works on Gmail, Dovecot and Exchange. If the server
 refuses to create a folder containing `@` (e.g. Cyrus with virtual domains), it is
-created with `_` instead: `Archives/2024/bobuser_gmail.com`. On servers whose folder
+created with `_` instead: `Archives/2024/gmail.com/bobuser_gmail.com`. On servers whose folder
 separator is `.`, dots in address-based names become `_` as well, so that
 `bob.user@gmail.com` stays one folder rather than nesting.
+
+### Keeping passwords in ~/.netrc
+
+To keep passwords out of `config.yaml`, put them in `~/.netrc` and set `auth: netrc`.
+`~/.netrc` is the standard credentials file also used by `ftp`, `curl` and Perl's
+`Net::Netrc`, so the file you used with `archiveimap.pl` works unchanged.
+
+1. Create `~/.netrc` with one `machine` entry per account. The `machine` name must match
+   the source's `imaphost`:
+
+   ```
+   machine exchangeserver.mydomain.com
+     login    kcraig
+     password s3cret
+
+   # two accounts on the same server
+   machine imap.gmail.com login homeaddress@gmail.com password "abcd efgh ijkl mnop"
+   machine imap.gmail.com login workaddress@gmail.com password qrstuvwxyzabcdef
+   ```
+
+   Entries can span several lines or share one. Put a value in double quotes if it
+   contains spaces, as Gmail app passwords do when copied. Lines starting with `#` are
+   comments.
+
+2. Make it readable only by you:
+
+   ```sh
+   chmod 600 ~/.netrc
+   ```
+
+3. Point the source at it:
+
+   ```yaml
+   exchange:
+    imaphost: exchangeserver.mydomain.com
+    auth: netrc
+    archiveroot: Archives
+    ...
+
+   gmail_work:
+    imaphost: imap.gmail.com
+    auth: netrc
+    username: workaddress@gmail.com
+    ...
+   ```
+
+How the lookup works:
+
+- The first entry whose `machine` matches `imaphost` (ignoring case) is used.
+- If the source sets `username`, the entry's `login` must match it exactly (case
+  matters). This is how you choose between several accounts on the same server.
+- If no `machine` entry matches, a `default login ... password ...` entry is used if
+  there is one.
+- Anything set in `config.yaml` wins: `username` and `password` there override the
+  `.netrc` values. `.netrc` is consulted whenever either one is missing, whatever
+  `auth` is set to (except `auth: gmail`, which uses OAuth instead).
+- Run with `-v` to see the lookup (`.netrc lookup for <host> and <username>`). If nothing
+  matches, the source fails with `<host> not found in .netrc`.
 
 ### Gmail setup (one time)
 
@@ -118,7 +183,7 @@ gmail_personal:
 ```
 
 App passwords also still work: use `auth: password` or `auth: netrc` with
-`imaphost: imap.gmail.com`.
+`imaphost: imap.gmail.com` (see [Keeping passwords in ~/.netrc](#keeping-passwords-in-netrc)).
 
 ### Gmail behaviour
 
@@ -136,8 +201,8 @@ empties after 30 days. Deleting from Trash or Spam flags the messages as deleted
 - If `seen` is omitted it defaults to `1` (only archive read messages), as the Perl
   documentation says. The Perl code actually defaulted to all messages.
 - An `age` of `0` or no `age` skips the folder, as the Perl documentation says.
-- `from` sorting is implemented: `root/yyyy/<sender's registrable domain>`, or the full
-  sender address for domains listed in `global.fulladdressdomains`.
+- `from` sorting is implemented: `root/yyyy/<sender's registrable domain>`, or
+  `root/yyyy/<domain>/<sender address>` for domains listed in `global.fulladdressdomains`.
 - Folder names built from addresses (`to` and `from`) never contain the server's folder
   separator; it is replaced with `_`.
 - To: address matching against Received: headers ignores case.
