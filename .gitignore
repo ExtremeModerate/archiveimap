@@ -1,0 +1,13 @@
+# Credentials and personal configuration. The real copies belong in ~/.archiveimap
+# and ~/.netrc; these patterns stop a copy dropped in the repo from being committed.
+config.yaml
+.archiveimaprc
+.archiveimap/
+google-client.json
+client_secret*.json
+tokens/
+.netrc
+.env
+.env.*
+*.pem
+*.key

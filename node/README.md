@@ -98,7 +98,7 @@ To keep passwords out of `config.yaml`, put them in `~/.netrc` and set `auth: ne
 
    ```
    machine exchangeserver.mydomain.com
-     login    kcraig
+     login    myusername
      password s3cret
 
    # two accounts on the same server
@@ -123,13 +123,12 @@ To keep passwords out of `config.yaml`, put them in `~/.netrc` and set `auth: ne
     imaphost: exchangeserver.mydomain.com
     auth: netrc
     archiveroot: Archives
-    ...
+    
 
    gmail_work:
     imaphost: imap.gmail.com
     auth: netrc
     username: workaddress@gmail.com
-    ...
    ```
 
 How the lookup works:
